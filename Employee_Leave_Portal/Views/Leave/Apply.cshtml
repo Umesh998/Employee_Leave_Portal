@@ -1,0 +1,147 @@
+﻿@model Employee_Leave_Portal.ViewModels.ApplyLeaveVm
+@{
+    ViewData["Title"] = "Apply for Leave";
+}
+
+<div class="page-header">
+    <h1>Apply for Leave</h1>
+    <p>Submit a new leave request. Balances are checked live as you select.</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+        <div class="card">
+            <div class="card-header">Leave Application Form</div>
+            <div class="card-body p-4">
+
+                <form asp-action="Apply" method="post">
+                    @Html.AntiForgeryToken()
+
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div asp-validation-summary="All" class="alert alert-danger"></div>
+                    }
+
+                    <!-- Leave Type -->
+                    <div class="mb-3">
+                        <label asp-for="LeaveType" class="form-label fw-semibold"></label>
+                        <select asp-for="LeaveType" id="leaveType"
+                                class="form-select"
+                                asp-items="Html.GetEnumSelectList<Employee_Leave_Portal.Models.LeaveType>()">
+                            <option value="">— Select leave type —</option>
+                        </select>
+                        <span asp-validation-for="LeaveType" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Hours (read-only, set by JS) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hours</label>
+                        <input type="text" id="hoursDisplay" class="form-control bg-light"
+                               readonly placeholder="Auto-assigned based on leave type" />
+                    </div>
+
+                    <!-- Leave Date -->
+                    <div class="mb-3">
+                        <label asp-for="LeaveDate" class="form-label fw-semibold"></label>
+                        <input asp-for="LeaveDate" id="leaveDate" type="date"
+                               class="form-control"
+                               max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <span asp-validation-for="LeaveDate" class="text-danger small"></span>
+                        <div class="form-text">Must be within the last 2 days.</div>
+                    </div>
+
+                    <!-- Live balance warning banner -->
+                    <div id="balanceBanner" class="alert d-none mb-3" role="alert">
+                        <i id="bannerIcon" class="bi me-2"></i>
+                        <span id="bannerMsg"></span>
+                    </div>
+
+                    <!-- Reason -->
+                    <div class="mb-4">
+                        <label asp-for="Reason" class="form-label fw-semibold"></label>
+                        <textarea asp-for="Reason" class="form-control" rows="3"
+                                  placeholder="Optional — briefly describe your reason"></textarea>
+                        <span asp-validation-for="Reason" class="text-danger small"></span>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" id="submitBtn" class="btn btn-primary w-100">
+                            <i class="bi bi-send me-1"></i> Submit Request
+                        </button>
+                        <a asp-action="Dashboard" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const hoursMap   = { '0': '2 hrs (Short Leave)', '1': '4 hrs (Half Day)', '2': '8 hrs (Full Leave)' };
+        const iconMap    = { success: 'bi-check-circle-fill', warning: 'bi-exclamation-triangle-fill', danger: 'bi-x-circle-fill' };
+
+        const leaveTypeEl = document.getElementById('leaveType');
+        const leaveDateEl = document.getElementById('leaveDate');
+        const hoursEl     = document.getElementById('hoursDisplay');
+        const banner      = document.getElementById('balanceBanner');
+        const bannerMsg   = document.getElementById('bannerMsg');
+        const bannerIcon  = document.getElementById('bannerIcon');
+        const submitBtn   = document.getElementById('submitBtn');
+
+        let debounceTimer = null;
+
+        function updateHours() {
+            const val = leaveTypeEl.value;
+            hoursEl.value = val !== '' ? hoursMap[val] : '';
+        }
+
+        function showBanner(severity, message, isAllowed) {
+            banner.className = `alert alert-${severity} mb-3`;
+            bannerIcon.className = `bi ${iconMap[severity]} me-2`;
+            bannerMsg.textContent = message;
+            submitBtn.disabled = !isAllowed;
+        }
+
+        function hideBanner() {
+            banner.className = 'alert d-none mb-3';
+            submitBtn.disabled = false;
+        }
+
+        async function fetchPreview() {
+            const leaveType = leaveTypeEl.value;
+            const leaveDate = leaveDateEl.value;
+
+            if (leaveType === '' || leaveDate === '') {
+                hideBanner();
+                return;
+            }
+
+            try {
+                const res  = await fetch(`/Leave/BalancePreview?leaveType=${leaveType}&leaveDate=${leaveDate}`);
+                if (!res.ok) { hideBanner(); return; }
+                const data = await res.json();
+                showBanner(data.severity, data.message, data.isAllowed);
+            } catch {
+                hideBanner();
+            }
+        }
+
+        function onInputChange() {
+            updateHours();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(fetchPreview, 350);
+        }
+
+        leaveTypeEl.addEventListener('change', onInputChange);
+        leaveDateEl.addEventListener('change', onInputChange);
+
+        // Show validation summary if model errors exist on POST-back
+        const valSummary = document.getElementById('val-summary');
+        if (valSummary && valSummary.querySelectorAll('li').length > 0) {
+            valSummary.classList.remove('d-none');
+        }
+    </script>
+}

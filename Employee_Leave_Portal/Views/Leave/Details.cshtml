@@ -1,0 +1,156 @@
+﻿@model Employee_Leave_Portal.ViewModels.LeaveDetailsVm
+@{
+    ViewData["Title"] = "Leave Details";
+    var badgeClass = Model.Status switch
+    {
+        "Pending_HOD" => "badge-pending-hod",
+        "Pending_HR" => "badge-pending-hr",
+        "Approved" => "badge-approved",
+        "Rejected" => "badge-rejected",
+        _ => "bg-secondary text-white"
+    };
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Leave Request #@Model.Id</h1>
+        <p>Submitted on @Model.DateApplied.ToString("dd MMM yyyy, hh:mm tt")</p>
+    </div>
+    <a asp-action="Dashboard" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row g-4">
+
+    <!-- ── Request Details ───────────────────────────────────────── -->
+    <div class="col-md-5">
+        <div class="card h-100">
+            <div class="card-header">Request Details</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-5 text-muted">Leave Type</dt>
+                    <dd class="col-7">@Model.LeaveType.Replace("Leave", " Leave")</dd>
+
+                    <dt class="col-5 text-muted">Leave Date</dt>
+                    <dd class="col-7">@Model.LeaveDate.ToString("dd MMM yyyy")</dd>
+
+                    <dt class="col-5 text-muted">Hours</dt>
+                    <dd class="col-7">@Model.Hours hrs</dd>
+
+                    <dt class="col-5 text-muted">Status</dt>
+                    <dd class="col-7">
+                        <span class="status-badge @badgeClass">
+                            @Model.Status.Replace("_", " ")
+                        </span>
+                    </dd>
+
+                    <dt class="col-5 text-muted">Loss of Pay</dt>
+                    <dd class="col-7">
+                        @if (Model.IsLossOfPay)
+                        {
+                            <span class="lop-pill">Yes — salary deduction applies</span>
+                        }
+                        else
+                        {
+                            <span class="text-success fw-semibold">No</span>
+                        }
+                    </dd>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Reason))
+                    {
+                        <dt class="col-5 text-muted">Reason</dt>
+                        <dd class="col-7">@Model.Reason</dd>
+                    }
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Approval Timeline ─────────────────────────────────────── -->
+    <div class="col-md-7">
+        <div class="card h-100">
+            <div class="card-header">Approval Timeline</div>
+            <div class="card-body">
+
+                <!-- Submitted step always shown -->
+                <div class="d-flex gap-3 mb-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center"
+                             style="width:34px;height:34px;flex-shrink:0">
+                            <i class="bi bi-send text-white" style="font-size:.85rem"></i>
+                        </div>
+                        @if (Model.Logs.Any())
+                        {
+                            <div style="width:2px;flex:1;background:#E2E8F0;margin:.25rem 0"></div>
+                        }
+                    </div>
+                    <div class="pb-3">
+                        <div class="fw-semibold" style="font-size:.9rem">Submitted</div>
+                        <div class="text-muted" style="font-size:.8rem">
+                            @Model.DateApplied.ToString("dd MMM yyyy, hh:mm tt")
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Approval log entries -->
+                @for (int i = 0; i < Model.Logs.Count; i++)
+                {
+                    var log = Model.Logs[i];
+                    bool isLast = i == Model.Logs.Count - 1;
+                    bool approved = log.Action == "Approved";
+                    string dotBg = approved ? "bg-success" : "bg-danger";
+                    string icon = approved ? "bi-check-lg" : "bi-x-lg";
+
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="d-flex flex-column align-items-center">
+                            <div class="rounded-circle @dotBg d-flex align-items-center justify-content-center"
+                                 style="width:34px;height:34px;flex-shrink:0">
+                                <i class="bi @icon text-white" style="font-size:.85rem"></i>
+                            </div>
+                            @if (!isLast)
+                            {
+                                <div style="width:2px;flex:1;background:#E2E8F0;margin:.25rem 0"></div>
+                            }
+                        </div>
+                        <div class="pb-3">
+                            <div class="fw-semibold" style="font-size:.9rem">
+                                @log.Action by @log.ActionBy
+                            </div>
+                            <div class="text-muted" style="font-size:.8rem">
+                                @log.Timestamp.ToString("dd MMM yyyy, hh:mm tt")
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(log.Comments))
+                            {
+                                <div class="mt-1 p-2 rounded" style="background:#F8FAFC;font-size:.83rem;color:#475569">
+                                    <i class="bi bi-chat-quote me-1"></i>@log.Comments
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Pending indicator if still in workflow -->
+                @if (Model.Status == "Pending_HOD" || Model.Status == "Pending_HR")
+                {
+                    <div class="d-flex gap-3">
+                        <div class="d-flex flex-column align-items-center">
+                            <div class="rounded-circle border border-2 border-warning d-flex align-items-center justify-content-center"
+                                 style="width:34px;height:34px;flex-shrink:0;background:#FFFBEB">
+                                <i class="bi bi-hourglass-split text-warning" style="font-size:.85rem"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="fw-semibold text-warning" style="font-size:.9rem">
+                                Awaiting @Model.Status.Replace("Pending_", "") Review
+                            </div>
+                            <div class="text-muted" style="font-size:.8rem">Pending</div>
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+
+</div>

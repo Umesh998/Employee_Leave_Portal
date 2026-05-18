@@ -1,0 +1,370 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Employee Leave Portal</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+
+    <style>
+            :root {
+                --brand-primary: #2563EB;
+                --brand-dark: #1E40AF;
+                --sidebar-width: 240px;
+            }
+
+            body {
+                background-color: #F1F5F9;
+                font-family: 'Segoe UI', system-ui, sans-serif;
+            }
+
+            /* ── Top navbar ───────────────────────────────────────────── */
+            .top-navbar {
+                background: var(--brand-primary);
+                height: 60px;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1030;
+                display: flex;
+                align-items: center;
+                padding: 0 1.5rem;
+                gap: 1rem;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            }
+
+                .top-navbar .brand {
+                    color: #fff;
+                    font-weight: 700;
+                    font-size: 1.15rem;
+                    text-decoration: none;
+                    letter-spacing: .3px;
+                    white-space: nowrap;
+                }
+
+                    .top-navbar .brand span {
+                        color: #93C5FD;
+                    }
+
+                .top-navbar .ms-auto {
+                    display: flex;
+                    align-items: center;
+                    gap: .75rem;
+                }
+
+                .top-navbar .user-badge {
+                    color: #DBEAFE;
+                    font-size: .85rem;
+                }
+
+                .top-navbar .btn-logout {
+                    color: #fff;
+                    border-color: rgba(255,255,255,.4);
+                    font-size: .82rem;
+                    padding: .3rem .75rem;
+                }
+
+                    .top-navbar .btn-logout:hover {
+                        background: rgba(255,255,255,.15);
+                    }
+
+            /* ── Sidebar ──────────────────────────────────────────────── */
+            .sidebar {
+                position: fixed;
+                top: 60px;
+                left: 0;
+                bottom: 0;
+                width: var(--sidebar-width);
+                background: #1E293B;
+                overflow-y: auto;
+                z-index: 1020;
+                padding-top: .75rem;
+            }
+
+                .sidebar .nav-section {
+                    padding: .5rem 1rem .2rem;
+                    font-size: .68rem;
+                    font-weight: 600;
+                    letter-spacing: .08em;
+                    text-transform: uppercase;
+                    color: #64748B;
+                }
+
+                .sidebar .nav-link {
+                    color: #CBD5E1;
+                    padding: .55rem 1.25rem;
+                    border-radius: 6px;
+                    margin: .1rem .5rem;
+                    font-size: .88rem;
+                    display: flex;
+                    align-items: center;
+                    gap: .6rem;
+                    transition: background .15s, color .15s;
+                }
+
+                    .sidebar .nav-link:hover,
+                    .sidebar .nav-link.active {
+                        background: var(--brand-primary);
+                        color: #fff;
+                    }
+
+                    .sidebar .nav-link i {
+                        font-size: 1rem;
+                        width: 18px;
+                        text-align: center;
+                    }
+
+            /* ── Main content ─────────────────────────────────────────── */
+            .main-content {
+                margin-left: var(--sidebar-width);
+                margin-top: 60px;
+                padding: 2rem;
+                min-height: calc(100vh - 60px);
+            }
+
+            /* ── Page header ──────────────────────────────────────────── */
+            .page-header {
+                margin-bottom: 1.75rem;
+            }
+
+                .page-header h1 {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: #0F172A;
+                    margin: 0;
+                }
+
+                .page-header p {
+                    color: #64748B;
+                    margin: .25rem 0 0;
+                    font-size: .9rem;
+                }
+
+            /* ── Cards ────────────────────────────────────────────────── */
+            .card {
+                border: none;
+                border-radius: 12px;
+                box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            }
+
+            .card-header {
+                background: #fff;
+                border-bottom: 1px solid #E2E8F0;
+                border-radius: 12px 12px 0 0 !important;
+                font-weight: 600;
+                font-size: .92rem;
+                color: #1E293B;
+                padding: .9rem 1.25rem;
+            }
+
+            /* ── Tables ───────────────────────────────────────────────── */
+            .table th {
+                font-size: .78rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                color: #64748B;
+                border-bottom: 2px solid #E2E8F0;
+                white-space: nowrap;
+            }
+
+            .table td {
+                font-size: .88rem;
+                vertical-align: middle;
+                color: #334155;
+            }
+
+            /* ── Status badges ────────────────────────────────────────── */
+            .badge-pending-hod {
+                background: #FEF3C7;
+                color: #92400E;
+            }
+
+            .badge-pending-hr {
+                background: #DBEAFE;
+                color: #1E3A8A;
+            }
+
+            .badge-approved {
+                background: #D1FAE5;
+                color: #065F46;
+            }
+
+            .badge-rejected {
+                background: #FEE2E2;
+                color: #991B1B;
+            }
+
+            .status-badge {
+                padding: .3em .65em;
+                border-radius: 20px;
+                font-size: .75rem;
+                font-weight: 600;
+            }
+
+            /* ── LOP pill ─────────────────────────────────────────────── */
+            .lop-pill {
+                background: #FEE2E2;
+                color: #991B1B;
+                padding: .2em .55em;
+                border-radius: 20px;
+                font-size: .72rem;
+                font-weight: 600;
+            }
+
+            /* ── Alert toast ──────────────────────────────────────────── */
+            .toast-alert {
+                position: fixed;
+                top: 72px;
+                right: 1.5rem;
+                z-index: 9999;
+                min-width: 320px;
+                max-width: 460px;
+                animation: slideIn .3s ease;
+            }
+
+            @@keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-12px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @@media (max-width: 768px) {
+                .sidebar {
+                    display: none;
+                }
+
+                .main-content {
+                    margin-left: 0;
+                    padding: 1rem;
+                }
+            }
+    </style>
+
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+
+    <!-- ── Top Navbar ──────────────────────────────────────────────────── -->
+    <nav class="top-navbar">
+        <a class="brand" asp-controller="Leave" asp-action="Dashboard">
+            Employee <span>Leave</span> Portal
+        </a>
+        <div class="ms-auto">
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <span class="user-badge">
+                    <i class="bi bi-person-circle me-1"></i>
+                    @User.Identity.Name
+                    <span class="badge bg-primary bg-opacity-75 ms-1" style="font-size:.7rem;">
+                        @User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
+                    </span>
+                </span>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-light btn-logout">
+                        <i class="bi bi-box-arrow-right me-1"></i> Logout
+                    </button>
+                </form>
+            }
+        </div>
+    </nav>
+
+    <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+        <nav>
+            @{
+                var ctrl = ViewContext.RouteData.Values["controller"]?.ToString();
+                var action = ViewContext.RouteData.Values["action"]?.ToString();
+            }
+
+            <div class="nav-section">My Leave</div>
+
+            <a class="nav-link @(ctrl == "Leave" && action == "Dashboard" ? "active" : "")"
+               asp-controller="Leave" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i> Dashboard
+            </a>
+
+            <a class="nav-link @(ctrl == "Leave" && action == "Apply" ? "active" : "")"
+               asp-controller="Leave" asp-action="Apply">
+                <i class="bi bi-calendar-plus"></i> Apply for Leave
+            </a>
+
+            @if (User.IsInRole("HOD") || User.IsInRole("Admin"))
+            {
+                <div class="nav-section mt-2">HOD</div>
+                <a class="nav-link @(ctrl == "Hod" ? "active" : "")"
+                   asp-controller="Hod" asp-action="Queue">
+                    <i class="bi bi-inbox"></i> Pending Requests
+                </a>
+            }
+
+            @if (User.IsInRole("HR") || User.IsInRole("Admin"))
+            {
+                <div class="nav-section mt-2">HR</div>
+                <a class="nav-link @(ctrl == "Hr" ? "active" : "")"
+                   asp-controller="Hr" asp-action="Queue">
+                    <i class="bi bi-people"></i> HR Approvals
+                </a>
+            }
+
+            @if (User.IsInRole("Admin"))
+            {
+                <div class="nav-section mt-2">Admin</div>
+
+                <a class="nav-link @(ctrl == "Department" ? "active" : "")"
+                   asp-controller="Department" asp-action="Index">
+                    <i class="bi bi-diagram-3"></i> Departments
+                </a>
+
+                <a class="nav-link @(ctrl == "Admin" && action == "Employees" ? "active" : "")"
+                   asp-controller="Admin" asp-action="Employees">
+                    <i class="bi bi-person-lines-fill"></i> Employees
+                </a>
+
+                <a class="nav-link @(ctrl == "Admin" && action == "BulkUpload" ? "active" : "")"
+                   asp-controller="Admin" asp-action="BulkUpload">
+                    <i class="bi bi-file-earmark-arrow-up"></i> Bulk Upload
+                </a>
+            }
+        </nav>
+    </aside>
+
+    <!-- ── TempData Alert ──────────────────────────────────────────────── -->
+    @if (TempData["AlertMessage"] is string alertMsg)
+    {
+        string severity = TempData["AlertSeverity"] as string ?? "info";
+        string iconClass = severity switch
+        {
+            "success" => "bi-check-circle-fill",
+            "warning" => "bi-exclamation-triangle-fill",
+            "danger" => "bi-x-circle-fill",
+            _ => "bi-info-circle-fill"
+        };
+        <div class="toast-alert alert alert-@severity alert-dismissible shadow" role="alert">
+            <i class="bi @iconClass me-2"></i>@alertMsg
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- ── Main Content ────────────────────────────────────────────────── -->
+    <main class="main-content">
+        @RenderBody()
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+
+</body>
+</html>

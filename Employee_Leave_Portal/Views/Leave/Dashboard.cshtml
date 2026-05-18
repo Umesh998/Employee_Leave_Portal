@@ -1,0 +1,139 @@
+﻿@model Employee_Leave_Portal.ViewModels.DashboardVm
+@{
+    ViewData["Title"] = "My Dashboard";
+}
+
+@section Styles {
+<style>
+    .balance-card { border-radius: 14px; border: none; }
+    .balance-card .value { font-size: 2.2rem; font-weight: 700; }
+    .balance-card .label { font-size: .8rem; color: #64748B; text-transform: uppercase; letter-spacing: .05em; }
+</style>
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1>My Dashboard</h1>
+        <p>@DateTime.Today.Year leave summary</p>
+    </div>
+    <a asp-action="Apply" class="btn btn-primary">
+        <i class="bi bi-calendar-plus me-1"></i> Apply for Leave
+    </a>
+</div>
+
+<!-- ── Balance Cards ─────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card balance-card p-3 bg-white">
+            <div class="label">Paid Leave Remaining</div>
+            <div class="value @(Model.PaidLeaveBalance <= 3 ? "text-danger" : Model.PaidLeaveBalance <= 7 ? "text-warning" : "text-success")">
+                @Model.PaidLeaveBalance.ToString("F1")
+                <small class="fs-6 text-muted">/ 18 days</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card balance-card p-3 bg-white">
+            <div class="label">Short Leaves Used This Month</div>
+            <div class="value @(Model.ShortLeaveUsedThisMonth >= 3 ? "text-danger" : "text-primary")">
+                @Model.ShortLeaveUsedThisMonth
+                <small class="fs-6 text-muted">/ 3 free</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card balance-card p-3 bg-white">
+            <div class="label">Total Requests</div>
+            <div class="value text-dark">@Model.Requests.Count</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Request History Table ─────────────────────────────────────── -->
+<div class="card">
+    <div class="card-header">Leave History</div>
+    <div class="card-body p-0">
+        @if (!Model.Requests.Any())
+        {
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-calendar-x fs-1"></i>
+                <p class="mt-2">No leave requests yet.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Leave Date</th>
+                            <th>Type</th>
+                            <th>Hours</th>
+                            <th>Applied On</th>
+                            <th>Status</th>
+                            <th>LOP</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.Requests)
+                        {
+                            <tr>
+                                <td>@r.LeaveDate.ToString("dd MMM yyyy")</td>
+                                <td>@r.LeaveType.Replace("Leave", " Leave")</td>
+                                <td>@r.Hours hrs</td>
+                                <td>@r.DateApplied.ToString("dd MMM yyyy")</td>
+                                <td>
+                                    @{
+                                        var badgeClass = r.Status switch
+                                        {
+                                            "Pending_HOD" => "badge-pending-hod",
+                                            "Pending_HR"  => "badge-pending-hr",
+                                            "Approved"    => "badge-approved",
+                                            "Rejected"    => "badge-rejected",
+                                            _             => "bg-secondary text-white"
+                                        };
+                                        var label = r.Status.Replace("_", " ");
+                                    }
+                                    <span class="status-badge @badgeClass">@label</span>
+                                </td>
+                                <td>
+                                    @if (r.IsLossOfPay)
+                                    {
+                                        <span class="lop-pill">LOP</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a asp-action="Details" asp-route-id="@r.Id"
+                                       class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<script>
+    @if (Model.ShowConfetti)
+    {
+        <text>
+        (function fireConfetti() {
+            var end = Date.now() + 2500;
+            var colors = ['#2563EB','#10B981','#F59E0B'];
+            (function frame() {
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: colors });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: colors });
+                if (Date.now()  end) requestAnimationFrame(frame);
+            })();
+        })();
+        </text>
+    }
+</script>
+}

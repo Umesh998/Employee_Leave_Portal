@@ -1,0 +1,71 @@
+﻿@model List<Employee_Leave_Portal.ViewModels.EmployeeRowVm>
+@{
+    ViewData["Title"] = "Employees";
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Employees</h1>
+        <p>@Model.Count total employees</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="BulkUpload" class="btn btn-outline-primary">
+            <i class="bi bi-file-earmark-arrow-up me-1"></i> Bulk Upload
+        </a>
+        <a asp-action="AddEmployee" class="btn btn-primary">
+            <i class="bi bi-person-plus me-1"></i> Add Employee
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                      
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in Model)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@e.FullName</td>
+                            <td style="font-size:.85rem">@e.Email</td>
+                            <td>
+                                <span class="badge @(e.Role == "Admin" ? "bg-dark" : e.Role == "HR" ? "bg-info text-dark" : e.Role == "HOD" ? "bg-primary" : "bg-secondary")">
+                                    @e.Role
+                                </span>
+                            </td>
+                            <td>@e.DepartmentName</td>
+                            
+                            <td>
+                                @if (e.IsActive)
+                                {
+                                    <span class="badge bg-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Inactive</span>
+                                }
+                            </td>
+                            <td>
+                                <a asp-action="EditEmployee" asp-route-id="@e.Id"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

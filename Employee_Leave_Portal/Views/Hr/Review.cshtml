@@ -1,0 +1,170 @@
+﻿@model Employee_Leave_Portal.ViewModels.HrReviewVm
+@{
+    ViewData["Title"] = "HR Review";
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Review Request #@Model.Id</h1>
+        <p>@Model.EmployeeName — @Model.DepartmentName</p>
+    </div>
+    <a asp-action="Queue" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row g-4">
+
+    <!-- ── Left column ───────────────────────────────────────────── -->
+    <div class="col-md-5">
+
+        <!-- Request details -->
+        <div class="card mb-3">
+            <div class="card-header">Request Details</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-5 text-muted">Employee</dt>
+                    <dd class="col-7">@Model.EmployeeName</dd>
+
+                    <dt class="col-5 text-muted">Email</dt>
+                    <dd class="col-7" style="font-size:.85rem">@Model.EmployeeEmail</dd>
+
+                    <dt class="col-5 text-muted">Department</dt>
+                    <dd class="col-7">@Model.DepartmentName</dd>
+
+                    <dt class="col-5 text-muted">Leave Type</dt>
+                    <dd class="col-7">@Model.LeaveType.Replace("Leave", " Leave")</dd>
+
+                    <dt class="col-5 text-muted">Leave Date</dt>
+                    <dd class="col-7">@Model.LeaveDate.ToString("dd MMM yyyy")</dd>
+
+                    <dt class="col-5 text-muted">Hours</dt>
+                    <dd class="col-7">@Model.Hours hrs</dd>
+
+                    <dt class="col-5 text-muted">Loss of Pay</dt>
+                    <dd class="col-7">
+                        @if (Model.IsLossOfPay)
+                        {
+                            <span class="lop-pill">Yes — salary deduction</span>
+                        }
+                        else
+                        {
+                            <span class="text-success fw-semibold">No</span>
+                        }
+                    </dd>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Reason))
+                    {
+                        <dt class="col-5 text-muted">Reason</dt>
+                        <dd class="col-7">@Model.Reason</dd>
+                    }
+                </dl>
+            </div>
+        </div>
+
+        <!-- Employee balance snapshot -->
+        <div class="card mb-3">
+            <div class="card-header">Employee Balance Snapshot</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted" style="font-size:.85rem">Paid Leave Remaining</span>
+                    <span class="fw-bold @(Model.CurrentPaidBalance <= 3 ? "text-danger" : Model.CurrentPaidBalance <= 7 ? "text-warning" : "text-success")">
+                        @Model.CurrentPaidBalance.ToString("F1") days
+                    </span>
+                </div>
+                <div class="progress mb-3" style="height:8px">
+                    @{
+                        int pct = (int)Math.Min(100, (Model.CurrentPaidBalance / 18m) * 100);
+                        string barColor = Model.CurrentPaidBalance <= 3 ? "bg-danger"
+                                        : Model.CurrentPaidBalance <= 7 ? "bg-warning" : "bg-success";
+                    }
+                    <div class="progress-bar @barColor" style="width:@pct%"></div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-muted" style="font-size:.85rem">Short Leaves This Month</span>
+                    <span class="fw-bold @(Model.ShortLeaveUsedMonth >= 3 ? "text-danger" : "text-primary")">
+                        @Model.ShortLeaveUsedMonth / 3
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- HOD approval log -->
+        @if (Model.Logs.Any())
+        {
+            <div class="card">
+                <div class="card-header">HOD Action</div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        @foreach (var log in Model.Logs)
+                        {
+                            <li class="list-group-item">
+                                <div class="d-flex justify-content-between">
+                                    <span class="fw-semibold">@log.ActionBy</span>
+                                    <span class="badge @(log.Action == "Approved" ? "bg-success" : "bg-danger")">
+                                        @log.Action
+                                    </span>
+                                </div>
+                                <div class="text-muted" style="font-size:.78rem">
+                                    @log.Timestamp.ToString("dd MMM yyyy, hh:mm tt")
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(log.Comments))
+                                {
+                                    <div class="mt-1" style="font-size:.83rem">@log.Comments</div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── Decision Form ─────────────────────────────────────────── -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">Final Decision</div>
+            <div class="card-body p-4">
+
+                @if (Model.IsLossOfPay)
+                {
+                    <div class="alert alert-danger mb-3">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Approving this request will mark it as <strong>Loss of Pay</strong>.
+                        A salary deduction will apply for this employee.
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        Comments <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <textarea id="comments" name="comments" class="form-control" rows="4"
+                              placeholder="Add a note for the employee..."></textarea>
+                </div>
+
+                <div class="d-flex gap-3">
+                    <form asp-action="Approve" asp-route-id="@Model.Id" method="post" class="w-100">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="comments" id="approveComments" />
+                        <button type="submit" class="btn btn-success w-100"
+                                onclick="document.getElementById('approveComments').value = document.getElementById('comments').value">
+                            <i class="bi bi-check-lg me-1"></i> Final Approve
+                        </button>
+                    </form>
+
+                    <form asp-action="Reject" asp-route-id="@Model.Id" method="post" class="w-100">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="comments" id="rejectComments" />
+                        <button type="submit" class="btn btn-danger w-100"
+                                onclick="document.getElementById('rejectComments').value = document.getElementById('comments').value">
+                            <i class="bi bi-x-lg me-1"></i> Reject
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>

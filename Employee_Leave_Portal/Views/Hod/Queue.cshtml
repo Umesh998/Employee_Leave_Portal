@@ -1,0 +1,70 @@
+﻿@model Employee_Leave_Portal.ViewModels.HodQueueVm
+@{
+    ViewData["Title"] = "Pending Approvals";
+}
+
+<div class="page-header">
+    <h1>Pending Approvals</h1>
+    <p>Department: <strong>@Model.DepartmentName</strong></p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Requests Awaiting Your Decision
+        <span class="badge bg-warning text-dark ms-2">@Model.Requests.Count</span>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.Requests.Any())
+        {
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-inbox fs-1"></i>
+                <p class="mt-2">No pending requests.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Leave Type</th>
+                            <th>Leave Date</th>
+                            <th>Hours</th>
+                            <th>Applied On</th>
+                            <th>LOP</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.Requests)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@r.EmployeeName</div>
+                                    <div class="text-muted" style="font-size:.78rem">@r.EmployeeEmail</div>
+                                </td>
+                                <td>@r.LeaveType.Replace("Leave", " Leave")</td>
+                                <td>@r.LeaveDate.ToString("dd MMM yyyy")</td>
+                                <td>@r.Hours hrs</td>
+                                <td>@r.DateApplied.ToString("dd MMM yyyy")</td>
+                                <td>
+                                    @if (r.IsLossOfPay)
+                                    {
+                                        <span class="lop-pill">LOP</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a asp-action="Review" asp-route-id="@r.Id"
+                                       class="btn btn-sm btn-primary">
+                                        Review
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

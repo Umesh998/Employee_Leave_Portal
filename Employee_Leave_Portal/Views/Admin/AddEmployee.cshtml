@@ -1,0 +1,67 @@
+﻿@* ── AddEmployee.cshtml ── place at Views/Admin/AddEmployee.cshtml ── *@
+@model Employee_Leave_Portal.ViewModels.AddEmployeeVm
+@{
+    ViewData["Title"] = "Add Employee";
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1>Add Employee</h1>
+    <a asp-action="Employees" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+        <div class="card">
+            <div class="card-header">Employee Details</div>
+            <div class="card-body p-4">
+                <form asp-action="AddEmployee" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="FullName" class="form-label fw-semibold"></label>
+                        <input asp-for="FullName" class="form-control" placeholder="Jane Doe" />
+                        <span asp-validation-for="FullName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label fw-semibold"></label>
+                        <input asp-for="Email" class="form-control" placeholder="jane@company.com" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Role" class="form-label fw-semibold"></label>
+                        <select asp-for="Role" class="form-select"
+                                asp-items="Html.GetEnumSelectList<Employee_Leave_Portal.Models.EmployeeRole>()"></select>
+                        <span asp-validation-for="Role" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="DepartmentId" class="form-label fw-semibold"></label>
+                        <select asp-for="DepartmentId" class="form-select"
+                                asp-items="Model.Departments">
+                            <option value="">— Select department —</option>
+                        </select>
+                        <span asp-validation-for="DepartmentId" class="text-danger small"></span>
+                    </div>
+
+                  
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-person-plus me-1"></i> Add Employee
+                        </button>
+                        <a asp-action="Employees" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

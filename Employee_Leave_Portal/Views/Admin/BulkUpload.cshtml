@@ -1,0 +1,74 @@
+﻿@* ── BulkUpload.cshtml ── place at Views/Admin/BulkUpload.cshtml ── *@
+@model Employee_Leave_Portal.ViewModels.BulkUploadVm
+@{
+    ViewData["Title"] = "Bulk Upload";
+}
+
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Bulk Upload</h1>
+        <p>Upload an Excel file to add or update multiple employees at once.</p>
+    </div>
+    <a asp-action="Employees" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+
+        <!-- Format guide -->
+        <div class="card mb-4">
+            <div class="card-header">Expected Excel Format</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>A — FullName</th>
+                                <th>B — Email</th>
+                                <th>C — Role</th>
+                                <th>D — DepartmentName</th>
+                                @* <th>E — Salary</th> *@
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="text-muted" style="font-size:.82rem">
+                                <td>Jane Doe</td>
+                                <td>jane@co.com</td>
+                                <td>Employee</td>
+                                <td>Engineering</td>
+                               @*  <td>75000</td> *@
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer text-muted" style="font-size:.8rem">
+                Row 1 must be the header row. Departments must already exist in the system.
+                Valid roles: <code>Employee</code>, <code>HOD</code>, <code>HR</code>, <code>Admin</code>.
+            </div>
+        </div>
+
+        <!-- Upload form -->
+        <div class="card">
+            <div class="card-header">Upload File</div>
+            <div class="card-body p-4">
+                <form asp-action="BulkUpload" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="All" class="alert alert-danger"></div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Excel File (.xlsx / .xls)</label>
+                        <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-cloud-upload me-1"></i> Upload &amp; Process
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
