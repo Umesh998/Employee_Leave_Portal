@@ -18,17 +18,18 @@
     </div>
 </div>
 
+
 <div class="card">
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
+                        <th>Employee ID</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
                         <th>Department</th>
-                      
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -37,7 +38,14 @@
                     @foreach (var e in Model)
                     {
                         <tr>
-                            <td class="fw-semibold">@e.FullName</td>
+                            <td>
+                                <a asp-action="EmployeeDetail" asp-route-id="@e.Id"
+                                   class="fw-semibold text-decoration-none text-dark">
+                                    @e.FullName
+                                </a>
+                            </td>
+                            <td style="font-size:.85rem;color:#64748B">@e.EmployeeCode</td>
+
                             <td style="font-size:.85rem">@e.Email</td>
                             <td>
                                 <span class="badge @(e.Role == "Admin" ? "bg-dark" : e.Role == "HR" ? "bg-info text-dark" : e.Role == "HOD" ? "bg-primary" : "bg-secondary")">
@@ -45,7 +53,6 @@
                                 </span>
                             </td>
                             <td>@e.DepartmentName</td>
-                            
                             <td>
                                 @if (e.IsActive)
                                 {
@@ -57,10 +64,18 @@
                                 }
                             </td>
                             <td>
-                                <a asp-action="EditEmployee" asp-route-id="@e.Id"
-                                   class="btn btn-sm btn-outline-secondary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
+                                <div class="d-flex gap-2">
+                                    <a asp-action="EditEmployee" asp-route-id="@e.Id"
+                                       class="btn btn-sm btn-outline-secondary"
+                                       title="Edit Employee">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a asp-action="EditBalance" asp-route-employeeId="@e.Id"
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="Edit Leave Balance">
+                                        <i class="bi bi-calendar-check"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     }

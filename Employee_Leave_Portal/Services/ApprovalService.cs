@@ -1,14 +1,10 @@
 ﻿// =============================================================================
-// Employee_Leave_Portal — Approval Service
+// Employee_Leave_Portal — ApprovalService (with email notifications)
 // File: Services/ApprovalService.cs
-// =============================================================================
-//
-// Implements the sequential HOD → HR approval gate and commits the balance
-// deduction only upon final HR approval.
-//
 // =============================================================================
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Employee_Leave_Portal.Data;
 using Employee_Leave_Portal.Models;
@@ -29,11 +25,13 @@ namespace Employee_Leave_Portal.Services
     {
         private readonly AppDbContext _db;
         private readonly ILeaveService _leaveService;
+        private readonly IEmailService _emailService;
 
-        public ApprovalService(AppDbContext db, ILeaveService leaveService)
+        public ApprovalService(AppDbContext db, ILeaveService leaveService, IEmailService emailService)
         {
             _db = db;
             _leaveService = leaveService;
+            _emailService = emailService;
         }
 
         // ── HOD Decision ──────────────────────────────────────────────────────
@@ -51,7 +49,6 @@ namespace Employee_Leave_Portal.Services
             if (request.Status != LeaveStatus.Pending_HOD)
                 return (false, "This request is not awaiting HOD approval.");
 
-            // Verify the acting HOD actually manages the employee's department
             var hod = await _db.Employees.FindAsync(hodEmployeeId);
             if (hod is null || hod.Role != EmployeeRole.HOD)
                 return (false, "Actor is not a recognised HOD.");
@@ -71,21 +68,60 @@ namespace Employee_Leave_Portal.Services
                     ActionBy_EmployeeId = hodEmployeeId,
                     Action = approve ? "Approved" : "Rejected",
                     Comments = comments,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
-
-                return approve
-                    ? (true, "Request forwarded to HR for final approval.")
-                    : (true, "Request rejected. The employee has been notified.");
             }
             catch
             {
                 await tx.RollbackAsync();
                 throw;
             }
+
+            // ── Emails after commit ───────────────────────────────────────────
+            try
+            {
+                if (approve)
+                {
+                    var hrList = await _db.Employees
+                        .Where(e => e.Role == EmployeeRole.HR && e.IsActive)
+                        .ToListAsync();
+
+                    foreach (var hr in hrList)
+                    {
+                        var (subject, body) = EmailTemplates.LeaveApprovedByHodToHr(
+                            hr.FullName,
+                            request.Employee!.FullName,
+                            request.Employee!.EmployeeCode,
+                            request.LeaveType,
+                            request.LeaveDate,
+                            request.Hours,
+                            comments);
+
+                        await _emailService.SendAsync(hr.Email, hr.FullName, subject, body);
+                    }
+                }
+                else
+                {
+                    var (subject, body) = EmailTemplates.LeaveRejectedToEmployee(
+                        request.Employee!.FullName,
+                        request.Employee!.EmployeeCode,
+                        request.LeaveType,
+                        request.LeaveDate,
+                        hod.FullName,
+                        comments);
+
+                    await _emailService.SendAsync(
+                        request.Employee!.Email, request.Employee.FullName, subject, body);
+                }
+            }
+            catch { /* email failure never rolls back approval */ }
+
+            return approve
+                ? (true, "Request forwarded to HR for final approval.")
+                : (true, "Request rejected. The employee has been notified.");
         }
 
         // ── HR Decision ───────────────────────────────────────────────────────
@@ -113,8 +149,6 @@ namespace Employee_Leave_Portal.Services
                 if (approve)
                 {
                     request.Status = LeaveStatus.Approved;
-
-                    // ── Commit the balance deduction ──────────────────────────
                     await FinaliseApprovalAsync(request);
                 }
                 else
@@ -128,30 +162,57 @@ namespace Employee_Leave_Portal.Services
                     ActionBy_EmployeeId = hrEmployeeId,
                     Action = approve ? "Approved" : "Rejected",
                     Comments = comments,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.Now
                 });
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
-
-                return approve
-                    ? (true, "Leave approved. Balance updated and employee notified.")
-                    : (true, "Leave rejected by HR. Employee notified.");
             }
             catch
             {
                 await tx.RollbackAsync();
                 throw;
             }
+
+            // ── Emails after commit ───────────────────────────────────────────
+            try
+            {
+                if (approve)
+                {
+                    var (subject, body) = EmailTemplates.LeaveApprovedToEmployee(
+                        request.Employee!.FullName,
+                        request.Employee!.EmployeeCode,
+                        request.LeaveType,
+                        request.LeaveDate,
+                        request.Hours,
+                        request.IsLossOfPay);
+
+                    await _emailService.SendAsync(
+                        request.Employee!.Email, request.Employee.FullName, subject, body);
+                }
+                else
+                {
+                    var (subject, body) = EmailTemplates.LeaveRejectedToEmployee(
+                        request.Employee!.FullName,
+                        request.Employee!.EmployeeCode,
+                        request.LeaveType,
+                        request.LeaveDate,
+                        hr.FullName,
+                        comments);
+
+                    await _emailService.SendAsync(
+                        request.Employee!.Email, request.Employee.FullName, subject, body);
+                }
+            }
+            catch { /* email failure never rolls back approval */ }
+
+            return approve
+                ? (true, "Leave approved. Balance updated and employee notified.")
+                : (true, "Leave rejected by HR. Employee notified.");
         }
 
-        // ── Private: balance finalisation (called only on HR approval) ────────
+        // ── Balance finalisation ──────────────────────────────────────────────
 
-        /// <summary>
-        /// Applies the actual paid-leave deduction to the running balance once
-        /// HR has approved the request. This is the single source of truth for
-        /// balance mutation — the rules engine only previews/flags, never commits.
-        /// </summary>
         private async Task FinaliseApprovalAsync(LeaveRequest request)
         {
             var balance = await _leaveService.GetOrCreateBalanceAsync(
@@ -160,21 +221,8 @@ namespace Employee_Leave_Portal.Services
             switch (request.LeaveType)
             {
                 case LeaveType.ShortLeave:
-                    // Only deduct if it was an overflow short leave
-                    if (request.IsLossOfPay)
+                    if (!request.IsLossOfPay && balance.PaidLeaveBalance >= 0.5m)
                     {
-                        // Balance already 0 — nothing to deduct; IsLossOfPay flag is enough
-                    }
-                    else if (balance.PaidLeaveBalance >= 0.5m)
-                    {
-                        // Check if it was a paid-overflow (3+ short leaves this month)
-                        // The flag was set correctly at submission time.
-                        // We check IsLossOfPay=false AND current count > 3 to decide.
-                        // Simplest safe approach: only deduct when submission tagged it as
-                        // needing a deduction (i.e. IsLossOfPay was false but was overflow).
-                        // We store this intent via a dedicated field on the request if needed;
-                        // here we rely on IsLossOfPay=false + LeaveType=ShortLeave meaning
-                        // the 0.5 deduction should apply if balance was sufficient at submission.
                         balance.PaidLeaveBalance -= 0.5m;
                         if (balance.PaidLeaveBalance < 0m) balance.PaidLeaveBalance = 0m;
                     }
@@ -196,12 +244,9 @@ namespace Employee_Leave_Portal.Services
                     if (!request.IsLossOfPay)
                     {
                         if (balance.PaidLeaveBalance >= 1.0m)
-                        {
                             balance.PaidLeaveBalance -= 1.0m;
-                        }
                         else if (balance.PaidLeaveBalance > 0m)
                         {
-                            // Partial coverage
                             balance.PaidLeaveBalance = 0m;
                             request.IsLossOfPay = true;
                         }

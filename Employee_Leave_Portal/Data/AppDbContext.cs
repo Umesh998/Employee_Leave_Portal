@@ -43,7 +43,7 @@ namespace Employee_Leave_Portal.Data
             {
                 // Email is the unique business key used for Excel upserts
                 e.HasIndex(x => x.Email).IsUnique();
-
+                
                 e.HasOne(x => x.Department)
                  .WithMany(d => d.Employees)
                  .HasForeignKey(x => x.DepartmentId)

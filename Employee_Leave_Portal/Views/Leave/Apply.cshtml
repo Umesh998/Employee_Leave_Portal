@@ -1,4 +1,5 @@
 ﻿@model Employee_Leave_Portal.ViewModels.ApplyLeaveVm
+
 @{
     ViewData["Title"] = "Apply for Leave";
 }
@@ -45,10 +46,10 @@
                         <label asp-for="LeaveDate" class="form-label fw-semibold"></label>
                         <input asp-for="LeaveDate" id="leaveDate" type="date"
                                class="form-control"
-                               max="@DateTime.Today.ToString("yyyy-MM-dd")" />
-                        <span asp-validation-for="LeaveDate" class="text-danger small"></span>
-                        <div class="form-text">Must be within the last 2 days.</div>
-                    </div>
+                               min="@DateTime.Today.AddDays(-2).ToString("yyyy-MM-dd")" />
+                        <div class="form-text">
+                            You can apply for advance leave or past leave within 2 days.
+                        </div>
 
                     <!-- Live balance warning banner -->
                     <div id="balanceBanner" class="alert d-none mb-3" role="alert">
@@ -124,6 +125,24 @@
                 if (!res.ok) { hideBanner(); return; }
                 const data = await res.json();
                 showBanner(data.severity, data.message, data.isAllowed);
+                        async function fetchPreview() {
+            const leaveType = leaveTypeEl.value;
+            const leaveDate = leaveDateEl.value;
+
+            if (leaveType === '' || leaveDate === '') {
+                hideBanner();
+                return;
+            }
+
+            try {
+                const res  = await fetch(`/Leave/BalancePreview?leaveType=${leaveType}&leaveDate=${leaveDate}`);
+                if (!res.ok) { hideBanner(); return; }
+                const data = await res.json();
+                showBanner(data.severity, data.message, data.isAllowed);
+            } catch {
+                hideBanner();
+            }
+        }
             } catch {
                 hideBanner();
             }
@@ -143,5 +162,27 @@
         if (valSummary && valSummary.querySelectorAll('li').length > 0) {
             valSummary.classList.remove('d-none');
         }
+
+                // Add this function
+        async function checkShortLeaveEligibility() {
+            const today = new Date().toISOString().split('T')[0];
+            try {
+                const res  = await fetch(`/Leave/BalancePreview?leaveType=0&leaveDate=${today}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                if (!data.isAllowed) {
+                    // Disable and hide Short Leave option
+                    const shortOpt = leaveTypeEl.querySelector('option[value="0"]');
+                    if (shortOpt) {
+                        shortOpt.disabled = true;
+                        shortOpt.text     = 'Short Leave (limit reached this month)';
+                    }
+                }
+            } catch { /* silent */ }
+        }
+
+        // Call on page load
+        checkShortLeaveEligibility();
     </script>
 }

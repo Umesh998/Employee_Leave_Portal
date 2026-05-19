@@ -27,6 +27,12 @@
                     </div>
 
                     <div class="mb-3">
+                        <label asp-for="EmployeeCode" class="form-label fw-semibold"></label>
+                        <input asp-for="EmployeeCode" class="form-control" />
+                        <span asp-validation-for="EmployeeCode" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
                         <label asp-for="FullName" class="form-label fw-semibold"></label>
                         <input asp-for="FullName" class="form-control" />
                         <span asp-validation-for="FullName" class="text-danger small"></span>

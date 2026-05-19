@@ -2,16 +2,6 @@
 // Employee_Leave_Portal — Leave Rules Engine (Service Layer)
 // File: Services/LeaveService.cs
 // =============================================================================
-//
-// Responsibilities:
-//   1. Validate the 2-day submission deadline.
-//   2. Run the leave-type deduction & overflow rules engine.
-//   3. Persist a new LeaveRequest (status = Pending_HOD).
-//   4. Expose a read-only balance query for the AJAX balance-check endpoint.
-//   5. Expose a balance preview method (no writes) used by the form's
-//      live-warning AJAX call.
-//
-// =============================================================================
 
 using System;
 using System.Threading.Tasks;
@@ -21,30 +11,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Employee_Leave_Portal.Services
 {
-    // ─────────────────────────────────────────────────────────────────────────
-    // Result / DTO types
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Describes the outcome of a rules-engine evaluation — used both for the
-    /// live AJAX preview and for the actual submission attempt.
-    /// </summary>
     public class LeaveEvaluationResult
     {
         public bool IsAllowed { get; init; }
-
-        /// <summary>UI severity: "success" | "warning" | "danger"</summary>
         public string Severity { get; init; } = "success";
-
-        /// <summary>Human-readable message shown as the inline banner.</summary>
         public string Message { get; init; } = string.Empty;
-
         public bool IsLossOfPay { get; init; }
-
-        /// <summary>
-        /// Projected paid-leave balance after this request (for preview only;
-        /// never persisted until HR approves).
-        /// </summary>
         public decimal ProjectedBalance { get; init; }
     }
 
@@ -56,10 +28,6 @@ namespace Employee_Leave_Portal.Services
         public int? LeaveRequestId { get; init; }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Service
-    // ─────────────────────────────────────────────────────────────────────────
-
     public interface ILeaveService
     {
         Task<LeaveEvaluationResult> PreviewLeaveAsync(int employeeId, LeaveType leaveType, DateTime leaveDate);
@@ -70,8 +38,8 @@ namespace Employee_Leave_Portal.Services
     public class LeaveService : ILeaveService
     {
         private readonly AppDbContext _db;
+        private readonly IEmailService _emailService;
 
-        // Hours are fixed by business rule — never trusted from the form POST
         private static readonly System.Collections.Generic.Dictionary<LeaveType, int> HoursMap = new()
         {
             [LeaveType.ShortLeave] = 2,
@@ -79,14 +47,14 @@ namespace Employee_Leave_Portal.Services
             [LeaveType.FullLeave] = 8
         };
 
-        public LeaveService(AppDbContext db) => _db = db;
+        public LeaveService(AppDbContext db, IEmailService emailService)
+        {
+            _db = db;
+            _emailService = emailService;
+        }
 
         // ── Public: balance query ─────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns the LeaveBalance for the given employee and year, creating and
-        /// persisting a fresh one (18 days) if it does not yet exist.
-        /// </summary>
         public async Task<LeaveBalance> GetOrCreateBalanceAsync(int employeeId, int year)
         {
             var balance = await _db.LeaveBalances
@@ -100,8 +68,8 @@ namespace Employee_Leave_Portal.Services
                     Year = year,
                     PaidLeaveBalance = 18.0m,
                     ShortLeaveUsedThisMonth = 0,
-                    LastResetMonth = DateTime.UtcNow.Month,
-                    LastResetYear = DateTime.UtcNow.Year
+                    LastResetMonth = DateTime.Now.Month,
+                    LastResetYear = DateTime.Now.Year
                 };
                 _db.LeaveBalances.Add(balance);
                 await _db.SaveChangesAsync();
@@ -112,32 +80,20 @@ namespace Employee_Leave_Portal.Services
 
         // ── Public: AJAX preview (no DB writes) ───────────────────────────────
 
-        /// <summary>
-        /// Evaluates the rules engine and returns a preview result without
-        /// persisting anything. Consumed by the leave form's AJAX endpoint.
-        /// </summary>
         public async Task<LeaveEvaluationResult> PreviewLeaveAsync(
             int employeeId, LeaveType leaveType, DateTime leaveDate)
         {
-            // 1. Deadline check
             var deadlineResult = CheckSubmissionDeadline(leaveDate);
             if (deadlineResult is not null) return deadlineResult;
 
-            // 2. Load balance (lazy-reset short-leave counter if month rolled)
             var balance = await GetOrCreateBalanceAsync(employeeId, leaveDate.Year);
-            EnsureMonthlyReset(balance, leaveDate);   // no save — preview only
+            EnsureMonthlyReset(balance, leaveDate);
 
-            // 3. Run rules (read-only snapshot — no balance mutation)
             return EvaluateRules(leaveType, balance, dryRun: true);
         }
 
-        // ── Public: submission (writes to DB) ────────────────────────────────
+        // ── Public: submission (writes to DB) ─────────────────────────────────
 
-        /// <summary>
-        /// Validates, evaluates the rules engine, and — if permitted — inserts a
-        /// new LeaveRequest in Pending_HOD status. Balance mutation happens only
-        /// on HR approval (see ApprovalService).
-        /// </summary>
         public async Task<SubmitLeaveResult> SubmitLeaveAsync(
             int employeeId, LeaveType leaveType, DateTime leaveDate, string? reason)
         {
@@ -153,7 +109,7 @@ namespace Employee_Leave_Portal.Services
                 };
             }
 
-            // 2. Duplicate check — prevent double-submission for the same date
+            // 2. Duplicate check
             bool duplicate = await _db.LeaveRequests.AnyAsync(lr =>
                 lr.EmployeeId == employeeId &&
                 lr.LeaveDate == leaveDate.Date &&
@@ -173,28 +129,32 @@ namespace Employee_Leave_Portal.Services
             var balance = await GetOrCreateBalanceAsync(employeeId, leaveDate.Year);
             EnsureMonthlyReset(balance, leaveDate);
 
-            // 4. Rules engine evaluation (dry-run = false to mutate counters)
+            // 4. Rules engine evaluation
             var evaluation = EvaluateRules(leaveType, balance, dryRun: false);
 
-            // NOTE: balance.PaidLeaveBalance is NOT decremented here.
-            // Decrement happens inside ApprovalService.FinaliseApprovalAsync
-            // when HR approves. The ShortLeaveUsedThisMonth counter IS incremented
-            // immediately (within the free-tier) so concurrent submissions are
-            // correctly bounded.
+            if (!evaluation.IsAllowed)
+            {
+                return new SubmitLeaveResult
+                {
+                    Success = false,
+                    Severity = evaluation.Severity,
+                    Message = evaluation.Message
+                };
+            }
 
             await using var tx = await _db.Database.BeginTransactionAsync();
             try
             {
-                // 5. Save balance counter change (ShortLeaveUsedThisMonth)
+                // 5. Save balance counter change
                 _db.LeaveBalances.Update(balance);
 
-                // 6. Create the leave request
+                // 6. Create leave request
                 var request = new LeaveRequest
                 {
                     EmployeeId = employeeId,
                     LeaveType = leaveType,
                     LeaveDate = leaveDate.Date,
-                    DateApplied = DateTime.UtcNow,
+                    DateApplied = DateTime.Now,
                     Hours = HoursMap[leaveType],
                     Reason = reason,
                     Status = LeaveStatus.Pending_HOD,
@@ -204,6 +164,78 @@ namespace Employee_Leave_Portal.Services
                 _db.LeaveRequests.Add(request);
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
+
+                // 7. Notify HOD of new leave request
+                try
+                {
+                    var emp = await _db.Employees
+                        .Include(e => e.Department)
+                        .FirstOrDefaultAsync(e => e.Id == employeeId);
+
+                    if (emp?.Department != null)
+                    {
+                        var hodEmployee = await _db.Employees
+                            .FirstOrDefaultAsync(e => e.Id == emp.Department.HOD_EmployeeId);
+
+                        if (hodEmployee != null)
+                        {
+                            var (hodSubject, hodBody) = EmailTemplates.LeaveSubmittedToHod(
+                                hodEmployee.FullName,
+                                emp.FullName,
+                                emp.EmployeeCode,
+                                leaveType,
+                                leaveDate,
+                                HoursMap[leaveType],
+                                reason);
+
+                            await _emailService.SendAsync(
+                                hodEmployee.Email, hodEmployee.FullName, hodSubject, hodBody);
+                        }
+                    }
+                }
+                catch { /* email failure never blocks submission */ }
+
+                // 8. Send email if this was the 3rd short leave (limit reached)
+                if (leaveType == LeaveType.ShortLeave && balance.ShortLeaveUsedThisMonth == 3)
+                {
+                    try
+                    {
+                        var emp = await _db.Employees.FindAsync(employeeId);
+                        if (emp != null)
+                        {
+                            string subject = "Short Leave Limit Reached — Action Required";
+                            string body = $@"
+                                <div style='font-family:Segoe UI,sans-serif;max-width:500px;margin:auto'>
+                                    <div style='background:#F59E0B;padding:24px;border-radius:12px 12px 0 0'>
+                                        <h2 style='color:#fff;margin:0'>Leave Limit Notice</h2>
+                                        <p style='color:#FEF3C7;margin:4px 0 0'>Employee Leave Portal</p>
+                                    </div>
+                                    <div style='background:#fff;padding:32px;
+                                                border:1px solid #E2E8F0;
+                                                border-radius:0 0 12px 12px'>
+                                        <p style='color:#334155'>Hi <strong>{emp.FullName}</strong>,</p>
+                                        <p style='color:#334155'>
+                                            You have used all <strong>3 free short leaves</strong>
+                                            for this month.
+                                        </p>
+                                        <div style='background:#FEF3C7;padding:16px;
+                                                    border-radius:8px;color:#92400E;margin:16px 0'>
+                                            ⚠ From now until the end of the month, you can only apply for
+                                            <strong>Half Day</strong> or <strong>Full Leave</strong>.
+                                            Short leave applications will be blocked.
+                                        </div>
+                                        <p style='color:#64748B;font-size:.85rem'>
+                                            Your short leave counter resets automatically
+                                            on the 1st of next month.
+                                        </p>
+                                    </div>
+                                </div>";
+
+                            await _emailService.SendAsync(emp.Email, emp.FullName, subject, body);
+                        }
+                    }
+                    catch { /* email failure never blocks submission */ }
+                }
 
                 return new SubmitLeaveResult
                 {
@@ -224,15 +256,15 @@ namespace Employee_Leave_Portal.Services
 
         private static LeaveEvaluationResult? CheckSubmissionDeadline(DateTime leaveDate)
         {
-            if (DateTime.Today > leaveDate.Date.AddDays(2))
+            if (leaveDate.Date < DateTime.Today.AddDays(-2))
             {
                 return new LeaveEvaluationResult
                 {
                     IsAllowed = false,
                     Severity = "danger",
-                    Message = $"Submission deadline exceeded. Leave requests must be submitted "
-                              + $"within 2 days of the leave date ({leaveDate:dd MMM yyyy}). "
-                              + $"The deadline was {leaveDate.Date.AddDays(2):dd MMM yyyy}."
+                    Message = $"Submission deadline exceeded. Leave requests for past dates must be "
+                              + $"submitted within 2 days. The deadline for {leaveDate:dd MMM yyyy} "
+                              + $"was {leaveDate.Date.AddDays(2):dd MMM yyyy}."
                 };
             }
             return null;
@@ -240,11 +272,6 @@ namespace Employee_Leave_Portal.Services
 
         // ── Private: monthly short-leave counter reset (lazy strategy) ────────
 
-        /// <summary>
-        /// Resets ShortLeaveUsedThisMonth to 0 if the calendar month/year has
-        /// rolled past the last recorded reset. Call before any reads of that
-        /// counter. Caller is responsible for persisting the entity.
-        /// </summary>
         private static void EnsureMonthlyReset(LeaveBalance balance, DateTime referenceDate)
         {
             bool monthRolled =
@@ -262,17 +289,6 @@ namespace Employee_Leave_Portal.Services
 
         // ── Private: core rules engine ────────────────────────────────────────
 
-        /// <summary>
-        /// Applies the deduction and overflow rules for the requested leave type.
-        ///
-        /// When <paramref name="dryRun"/> is true:
-        ///   — balance fields are NOT mutated (safe for preview calls).
-        ///
-        /// When <paramref name="dryRun"/> is false:
-        ///   — ShortLeaveUsedThisMonth is incremented (within free tier only).
-        ///   — PaidLeaveBalance is NOT touched here; it is decremented by
-        ///     ApprovalService.FinaliseApprovalAsync on HR approval.
-        /// </summary>
         private static LeaveEvaluationResult EvaluateRules(
             LeaveType leaveType, LeaveBalance balance, bool dryRun)
         {
@@ -286,67 +302,95 @@ namespace Employee_Leave_Portal.Services
         }
 
         // ── Short Leave ───────────────────────────────────────────────────────
-        //
-        //  Free tier: up to 3 per month — increment counter, no paid-leave touch.
-        //  4th+, balance >= 0.5: warn user, flag 0.5 day will be deducted on approval.
-        //  4th+, balance  < 0.5: allow, flag IsLossOfPay = true.
+
+        //private static LeaveEvaluationResult EvaluateShortLeave(LeaveBalance balance, bool dryRun)
+        //{
+        //    const int freeMonthlyLimit = 3;
+        //    const decimal overflowDeduction = 0.5m;
+
+        //    if (balance.ShortLeaveUsedThisMonth < freeMonthlyLimit)
+        //    {
+        //        // Within free tier
+        //        if (!dryRun) balance.ShortLeaveUsedThisMonth++;
+
+        //        int remaining = freeMonthlyLimit - balance.ShortLeaveUsedThisMonth;
+
+        //        return new LeaveEvaluationResult
+        //        {
+        //            IsAllowed = true,
+        //            Severity = "success",
+        //            IsLossOfPay = false,
+        //            ProjectedBalance = balance.PaidLeaveBalance,
+        //            Message = remaining > 0
+        //                ? $"Short leave granted. You have {remaining} free short leave(s) remaining this month."
+        //                : "Short leave granted. This was your last free short leave for this month. "
+        //                + "Any further short leaves will be deducted from your Paid Leave balance."
+        //        };
+        //    }
+
+        //    // Overflow — count already at 3 or more
+        //    if (balance.PaidLeaveBalance >= overflowDeduction)
+        //    {
+        //        decimal projected = balance.PaidLeaveBalance - overflowDeduction;
+        //        return new LeaveEvaluationResult
+        //        {
+        //            IsAllowed = true,
+        //            Severity = "warning",
+        //            IsLossOfPay = false,
+        //            ProjectedBalance = projected,
+        //            Message = $"You have used all 3 free short leaves this month. "
+        //                             + $"0.5 day will be deducted from your Paid Leave balance upon approval. "
+        //                             + $"Remaining balance after approval: {projected:F1} day(s)."
+        //        };
+        //    }
+
+        //    // Overflow AND balance exhausted → Loss of Pay
+        //    return new LeaveEvaluationResult
+        //    {
+        //        IsAllowed = true,
+        //        Severity = "danger",
+        //        IsLossOfPay = true,
+        //        ProjectedBalance = 0m,
+        //        Message = "⚠ Your Paid Leave balance is exhausted. This short leave will be "
+        //                         + "marked as Loss of Pay and a half-day salary deduction will be applied."
+        //    };
+        //}
 
         private static LeaveEvaluationResult EvaluateShortLeave(LeaveBalance balance, bool dryRun)
         {
             const int freeMonthlyLimit = 3;
-            const decimal overflowDeduction = 0.5m;
 
-            if (balance.ShortLeaveUsedThisMonth < freeMonthlyLimit)
+            if (balance.ShortLeaveUsedThisMonth >= freeMonthlyLimit)
             {
-                // Within free tier
-                if (!dryRun) balance.ShortLeaveUsedThisMonth++;
-
-                int remaining = freeMonthlyLimit - balance.ShortLeaveUsedThisMonth;
-
                 return new LeaveEvaluationResult
                 {
-                    IsAllowed = true,
-                    Severity = "success",
+                    IsAllowed = false,
+                    Severity = "danger",
                     IsLossOfPay = false,
                     ProjectedBalance = balance.PaidLeaveBalance,
-                    Message = remaining > 0
-                        ? $"Short leave granted. You have {remaining} free short leave(s) remaining this month."
-                        : "Short leave granted. This was your last free short leave for this month. "
-                        + "Any further short leaves will be deducted from your Paid Leave balance."
+                    Message = "You have used all 3 short leaves for this month. "
+                                     + "Please apply for a Half Day or Full Leave instead."
                 };
             }
 
-            // Overflow — count already at 3 or more
-            if (balance.PaidLeaveBalance >= overflowDeduction)
-            {
-                decimal projected = balance.PaidLeaveBalance - overflowDeduction;
-                return new LeaveEvaluationResult
-                {
-                    IsAllowed = true,
-                    Severity = "warning",
-                    IsLossOfPay = false,
-                    ProjectedBalance = projected,
-                    Message = $"You have used all 3 free short leaves this month. "
-                                     + $"0.5 day will be deducted from your Paid Leave balance upon approval. "
-                                     + $"Remaining balance after approval: {projected:F1} day(s)."
-                };
-            }
+            if (!dryRun) balance.ShortLeaveUsedThisMonth++;
 
-            // Overflow AND balance exhausted → Loss of Pay
+            int remaining = freeMonthlyLimit - balance.ShortLeaveUsedThisMonth;
+
             return new LeaveEvaluationResult
             {
                 IsAllowed = true,
-                Severity = "danger",
-                IsLossOfPay = true,
-                ProjectedBalance = 0m,
-                Message = "⚠ Your Paid Leave balance is exhausted. This short leave will be "
-                                 + "marked as Loss of Pay and a half-day salary deduction will be applied."
+                Severity = remaining == 0 ? "warning" : "success",
+                IsLossOfPay = false,
+                ProjectedBalance = balance.PaidLeaveBalance,
+                Message = remaining > 0
+                    ? $"Short leave granted. You have {remaining} short leave(s) remaining this month."
+                    : "Short leave granted. This was your last free short leave for this month. "
+                    + "From next short leave you will need to apply for Half Day or Full Leave."
             };
         }
 
         // ── Half Day ──────────────────────────────────────────────────────────
-        //
-        //  Deduct 0.5 days. If balance is insufficient → Loss of Pay.
 
         private static LeaveEvaluationResult EvaluateHalfDay(LeaveBalance balance)
         {
@@ -381,9 +425,6 @@ namespace Employee_Leave_Portal.Services
         }
 
         // ── Full Leave ────────────────────────────────────────────────────────
-        //
-        //  Deduct 1.0 day. Partial balance (e.g. 0.5) → partial deduction allowed but warn.
-        //  Zero balance → Loss of Pay.
 
         private static LeaveEvaluationResult EvaluateFullLeave(LeaveBalance balance)
         {
@@ -407,12 +448,11 @@ namespace Employee_Leave_Portal.Services
 
             if (balance.PaidLeaveBalance > 0m)
             {
-                // Has a fractional balance (e.g. 0.5) — not enough for a full day
                 return new LeaveEvaluationResult
                 {
                     IsAllowed = true,
                     Severity = "warning",
-                    IsLossOfPay = false,   // partially covered — HR decides on approval
+                    IsLossOfPay = false,
                     ProjectedBalance = 0m,
                     Message = $"⚠ You only have {balance.PaidLeaveBalance:F1} day(s) of Paid Leave remaining. "
                                      + "This will be applied toward today's full leave; "

@@ -15,6 +15,8 @@ namespace Employee_Leave_Portal.ViewModels
     public class EmployeeRowVm
     {
         public int Id { get; set; }
+
+        public string EmployeeCode { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
@@ -27,6 +29,11 @@ namespace Employee_Leave_Portal.ViewModels
 
     public class AddEmployeeVm
     {
+
+        [Required, MaxLength(20)]
+        [Display(Name = "Employee ID")]
+        public string EmployeeCode { get; set; } = string.Empty;
+
         [Required, MaxLength(200)]
         [Display(Name = "Full Name")]
         public string FullName { get; set; } = string.Empty;
@@ -54,6 +61,10 @@ namespace Employee_Leave_Portal.ViewModels
     public class EditEmployeeVm
     {
         public int Id { get; set; }
+
+        [Required, MaxLength(20)]
+        [Display(Name = "Employee ID")]
+        public string EmployeeCode { get; set; } = string.Empty;
 
         [Required, MaxLength(200)]
         [Display(Name = "Full Name")]
@@ -92,5 +103,23 @@ namespace Employee_Leave_Portal.ViewModels
         public int Inserted { get; set; }
         public int Updated { get; set; }
         public List<string> Errors { get; set; } = new();
+    }
+
+
+    public class EditBalanceVm
+    {
+        public int EmployeeId { get; set; }
+        public string EmployeeName { get; set; } = string.Empty;
+        public int Year { get; set; }
+
+        [Required]
+        [Range(0, 18)]
+        [Display(Name = "Paid Leave Balance")]
+        public decimal PaidLeaveBalance { get; set; }
+
+        [Required]
+        [Range(0, 3)]
+        [Display(Name = "Short Leaves Used This Month")]
+        public int ShortLeaveUsedThisMonth { get; set; }
     }
 }

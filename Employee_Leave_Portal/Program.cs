@@ -29,8 +29,11 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 // ── Application Services ──────────────────────────────────────────────────────
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILeaveService, LeaveService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
+builder.Services.AddSingleton<IOtpService, OtpService>();
+
 
 // ── EPPlus license ────────────────────────────────────────────────────────────
 OfficeOpenXml.ExcelPackage.License.SetNonCommercialPersonal("Employee_Leave_Portal");

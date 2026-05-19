@@ -71,6 +71,9 @@ namespace Employee_Leave_Portal.Models
         [Key]
         public int Id { get; set; }
 
+        [MaxLength(20)]
+        public string EmployeeCode { get; set; } = string.Empty;
+
         [Required, MaxLength(200)]
         public string FullName { get; set; } = string.Empty;
 
@@ -153,7 +156,7 @@ namespace Employee_Leave_Portal.Models
         public DateTime LeaveDate { get; set; }
 
         /// <summary>UTC timestamp when the form was submitted.</summary>
-        public DateTime DateApplied { get; set; } = DateTime.UtcNow;
+        public DateTime DateApplied { get; set; } = DateTime.Now;
 
         /// <summary>
         /// Fixed by LeaveType: ShortLeave=2, HalfDay=4, FullLeave=8.
@@ -199,7 +202,7 @@ namespace Employee_Leave_Portal.Models
         [MaxLength(1000)]
         public string? Comments { get; set; }
 
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public DateTime Timestamp { get; set; } = DateTime.Now;
 
         // Navigation
         [ForeignKey(nameof(LeaveRequestId))]

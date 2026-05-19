@@ -29,7 +29,7 @@
                                 <th>B — Email</th>
                                 <th>C — Role</th>
                                 <th>D — DepartmentName</th>
-                                @* <th>E — Salary</th> *@
+                                <th>E — EmployeeCode</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -38,6 +38,7 @@
                                 <td>jane@co.com</td>
                                 <td>Employee</td>
                                 <td>Engineering</td>
+                                <td>VE001</td>
                                @*  <td>75000</td> *@
                             </tr>
                         </tbody>
@@ -56,7 +57,11 @@
             <div class="card-body p-4">
                 <form asp-action="BulkUpload" method="post" enctype="multipart/form-data">
                     @Html.AntiForgeryToken()
-                    <div asp-validation-summary="All" class="alert alert-danger"></div>
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div asp-validation-summary="All" class="alert alert-danger"></div>
+                    }
+
 
                     <div class="mb-4">
                         <label class="form-label fw-semibold">Excel File (.xlsx / .xls)</label>
